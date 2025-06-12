@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>【AI機能搭載・スマホ対応】インタラクティブ台湾旅行ガイド</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutral Harmony -->
+    <!-- Application Structure Plan: レポートの線形構造を解体し、旅行者の思考プロセスに合わせたタスク指向のダッシュボード型SPAを設計。主なセクションは「旅のダッシュボード」「探索：観光とグルメ」「グルメ深掘り」「旅の準備と注意点」。ユーザーが「今知りたいこと」に即座にアクセスできることを最優先。観光とグルメ情報を地図のように連携させ、フィルター機能で横断的に探索できるようにすることで、計画と現地での利便性を最大化する。歴史は静的なリストではなく、インタラクティブな年表で能動的な発見を促す。Gemini APIによるAI旅プランナーとグルメ解説機能を追加。 -->
+    <!-- Visualization & Content Choices: 1. 歴史情報 -> Goal: 文脈理解の促進 -> Viz: インタラクティブなHTML/CSSタイムライン -> Interaction: クリックで詳細表示 -> Justification: 静的なテキストよりエンゲージメントを高め、歴史の流れを視覚的に理解しやすくする。Method: Vanilla JS + Tailwind。 2. 観光/グルメスポット -> Goal: 網羅的な探索と比較 -> Viz: アイコン付きカードグリッド -> Interaction: カテゴリフィルター、クリックでモーダル表示 -> Justification: 情報をコンパクトに提示し、ユーザーが関心に応じて深掘りできる。地図アプリのように使える。Method: Vanilla JS + Tailwind。 3. グルメ価格帯 -> Goal: 予算感の把握 -> Viz: ドーナツチャート -> Interaction: ホバーで詳細表示 -> Justification: レポート内の価格データを集計・可視化し、一目で食事の予算感を伝えられる。Method: Chart.js。 4. AI旅プランナー -> Goal: 計画の自動化と提案 -> Viz: ボタンとテキストエリア -> Interaction: スポット選択→ボタンクリックでプラン生成 -> Justification: ユーザーの選択に基づいたパーソナライズされた旅程を提供し、計画の手間を大幅に削減する。Method: Gemini API。 5. AIグルメ解説 -> Goal: 現地での注文支援 -> Viz: モーダル内のボタンとテキストエリア -> Interaction: ボタンクリックでメニュー解説生成 -> Justification: 言語の壁を取り払い、ローカルな食体験を深める。Method: Gemini API。 -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #FDFBF8; }
+        .chart-container { position: relative; width: 100%; max-width: 400px; margin-left: auto; margin-right: auto; height: 280px; max-height: 350px; }
+        @media (min-width: 768px) { .chart-container { height: 350px; } }
+        .active-nav { color: #D97706; border-bottom: 2px solid #D97706; }
+        .inactive-nav { color: #44403C; }
+        .modal { transition: opacity 0.25s ease; }
+        .modal-content { transition: transform 0.25s ease; }
+        .timeline-item::before { content: ''; position: absolute; left: 11px; top: 1rem; bottom: 0; width: 2px; background-color: #E7E5E4; }
+        .timeline-item:last-child::before { display: none; }
+        .timeline-dot { position: absolute; left: 4px; top: 1rem; width: 18px; height: 18px; }
+        .active-filter { background-color: #D97706; color: white; }
+        .inactive-filter { background-color: #E7E5E4; color: #44403C; }
+        .spot-card.selected { box-shadow: 0 0 0 3px #F97316; transform: scale(1.02); }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #D97706; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .gemini-output { white-space: pre-wrap; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 0.5rem; padding: 1rem; margin-top: 1rem; font-family: 'Noto Sans JP', sans-serif; line-height: 1.7; font-size: 0.9rem;}
+    </style>
+</head>
+<body class="text-stone-800">
+
+    <header id="header" class="bg-white/80 backdrop-blur-md sticky top-0 z-40 shadow-sm">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex-shrink-0">
+                    <a href="#hero" class="text-lg sm:text-xl font-bold text-stone-700">🇹🇼 台北トラベルガイド</a>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#dashboard" class="nav-link inactive-nav px-3 py-2 rounded-md text-sm font-medium">ダッシュボード</a>
+                        <a href="#planner" class="nav-link inactive-nav px-3 py-2 rounded-md text-sm font-medium">AIプランナー</a>
+                        <a href="#explore" class="nav-link inactive-nav px-3 py-2 rounded-md text-sm font-medium">探索</a>
+                        <a href="#gourmet" class="nav-link inactive-nav px-3 py-2 rounded-md text-sm font-medium">グルメ深掘り</a>
+                        <a href="#tips" class="nav-link inactive-nav px-3 py-2 rounded-md text-sm font-medium">旅の準備</a>
+                    </div>
+                </div>
+                <div class="md:hidden">
+                    <button id="mobile-menu-button" class="inline-flex items-center justify-center p-2 rounded-md text-stone-600 hover:text-stone-800 hover:bg-stone-100 focus:outline-none">
+                        <span class="sr-only">メニューを開く</span>
+                        <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </nav>
+        <div id="mobile-menu" class="md:hidden hidden">
+            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                 <a href="#dashboard" class="block nav-link inactive-nav px-3 py-2 rounded-md text-base font-medium">ダッシュボード</a>
+                 <a href="#planner" class="block nav-link inactive-nav px-3 py-2 rounded-md text-base font-medium">AIプランナー</a>
+                 <a href="#explore" class="block nav-link inactive-nav px-3 py-2 rounded-md text-base font-medium">探索</a>
+                 <a href="#gourmet" class="block nav-link inactive-nav px-3 py-2 rounded-md text-base font-medium">グルメ深掘り</a>
+                 <a href="#tips" class="block nav-link inactive-nav px-3 py-2 rounded-md text-base font-medium">旅の準備</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section id="hero" class="pt-10 pb-12 bg-stone-100">
+            <div class="container mx-auto px-4 text-center">
+                <h1 class="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-stone-800">3日間で満喫！<br><span class="text-amber-600">台北インタラクティブガイド</span></h1>
+                <p class="mt-4 max-w-2xl mx-auto text-base md:text-lg text-stone-600">AIがあなたの旅を強力にサポート。行きたい場所を選ぶだけで、あなただけのオリジナルプランを自動生成します。</p>
+            </div>
+        </section>
+
+        <section id="dashboard" class="py-12 md:py-20">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-10">
+                    <h2 class="text-2xl md:text-3xl font-bold tracking-tight">旅のダッシュボード</h2>
+                    <p class="mt-3 text-base md:text-lg text-stone-600">まずは基本情報と歴史のハイライトをチェック。</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                    <div class="bg-white p-6 rounded-xl shadow-md text-center">
+                        <div class="text-4xl mb-3">☀️</div>
+                        <h3 class="text-lg font-semibold mb-2">6月の気候</h3>
+                        <p class="text-stone-600 text-sm">平均27-32℃。高温多湿で真夏の気候。スコールに備え、折り畳み傘と羽織ものが必須です。</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-md text-center">
+                        <div class="text-4xl mb-3">💸</div>
+                        <h3 class="text-lg font-semibold mb-2">通貨とレート</h3>
+                        <p class="text-stone-600 text-sm">NT$1 ≒ 4.8円。空港での両替がおすすめ。夜市やローカル店では現金が基本です。</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-md text-center">
+                        <div class="text-4xl mb-3">📱</div>
+                        <h3 class="text-lg font-semibold mb-2">通信手段</h3>
+                        <p class="text-stone-600 text-sm">空港で買えるSIMカードが便利。3日間データ無制限で約NT$300。中華電信が安定。</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xl md:text-2xl font-bold text-center mb-8">クリックで深掘り！台湾の歴史タイムライン</h3>
+                    <div class="max-w-3xl mx-auto" id="history-timeline"></div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="planner" class="py-12 md:py-20 bg-amber-50">
+             <div class="container mx-auto px-4">
+                <div class="text-center mb-10">
+                    <h2 class="text-2xl md:text-3xl font-bold tracking-tight">✨ AI旅プランナー</h2>
+                    <p class="mt-3 text-base md:text-lg text-stone-600">下の「探索」セクションで行きたいスポットをタップして選び、ボタンを押してください。</p>
+                </div>
+                <div class="max-w-4xl mx-auto bg-white p-6 md:p-8 rounded-xl shadow-lg">
+                    <h3 class="text-lg font-semibold mb-4">選択中のスポット：</h3>
+                    <div id="selected-spots-list" class="flex flex-wrap gap-3 mb-6 min-h-[40px] bg-stone-100 p-3 rounded-lg">
+                        <p id="selected-spots-placeholder" class="text-stone-500">まだスポットが選択されていません。「探索」セクションから選んでください。</p>
+                    </div>
+                    <button id="generate-plan-btn" class="w-full bg-amber-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-amber-600 transition-colors disabled:bg-stone-300 disabled:cursor-not-allowed text-base">
+                        AIに3日間のモデルコースを作成してもらう
+                    </button>
+                    <div id="plan-loader" class="hidden loader"></div>
+                    <div id="plan-output" class="gemini-output hidden"></div>
+                </div>
+             </div>
+        </section>
+
+        <section id="explore" class="py-12 md:py-20 bg-stone-100">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-10">
+                    <h2 class="text-2xl md:text-3xl font-bold tracking-tight">探索：観光とグルメ</h2>
+                    <p class="mt-3 text-base md:text-lg text-stone-600">気になるカードをタップしてプランに追加！もう一度タップで解除できます。</p>
+                </div>
+                
+                <div id="filters" class="flex flex-wrap justify-center gap-2 mb-8">
+                    <button data-filter="all" class="filter-btn active-filter px-4 py-2 text-sm font-semibold rounded-full shadow-sm">すべて</button>
+                    <button data-filter="市内観光" class="filter-btn inactive-filter px-4 py-2 text-sm font-semibold rounded-full shadow-sm">市内観光</button>
+                    <button data-filter="日帰り" class="filter-btn inactive-filter px-4 py-2 text-sm font-semibold rounded-full shadow-sm">日帰り</button>
+                    <button data-filter="夜市" class="filter-btn inactive-filter px-4 py-2 text-sm font-semibold rounded-full shadow-sm">夜市</button>
+                    <button data-filter="グルメ" class="filter-btn inactive-filter px-4 py-2 text-sm font-semibold rounded-full shadow-sm">定番グルメ</button>
+                    <button data-filter="スイーツ" class="filter-btn inactive-filter px-4 py-2 text-sm font-semibold rounded-full shadow-sm">スイーツ</button>
+                </div>
+
+                <div id="explore-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                </div>
+            </div>
+        </section>
+
+        <section id="gourmet" class="py-12 md:py-20">
+            <div class="container mx-auto px-4">
+                 <div class="text-center mb-10">
+                    <h2 class="text-2xl md:text-3xl font-bold tracking-tight">グルメ深掘り</h2>
+                    <p class="mt-3 text-base md:text-lg text-stone-600">食は旅のハイライト。予算感とジャンル別のおすすめをチェック。</p>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                    <div class="order-2 lg:order-1">
+                        <h3 class="text-xl md:text-2xl font-bold text-center mb-8">ジャンル別 おすすめリスト</h3>
+                        <div id="gourmet-categories" class="space-y-4"></div>
+                    </div>
+                     <div class="order-1 lg:order-2">
+                        <h3 class="text-xl md:text-2xl font-bold text-center mb-4">グルメ価格帯の目安</h3>
+                         <p class="text-center text-stone-600 mb-6 text-sm">グラフにカーソルを合わせると、メニュー例が見られます。</p>
+                        <div class="chart-container">
+                            <canvas id="priceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tips" class="py-12 md:py-20 bg-stone-100">
+            <div class="container mx-auto px-4">
+                 <div class="text-center mb-10">
+                    <h2 class="text-2xl md:text-3xl font-bold tracking-tight">旅の準備と注意点</h2>
+                    <p class="mt-3 text-base md:text-lg text-stone-600">スムーズで安全な旅のために。</p>
+                </div>
+                <div id="tips-accordion" class="max-w-3xl mx-auto space-y-4"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-stone-800 text-white">
+        <div class="container mx-auto py-8 px-4 text-center">
+            <p>インタラクティブ台湾旅行ガイド (AI搭載)</p>
+            <p class="text-sm text-stone-400 mt-2">このガイドで、最高の台北旅行を！</p>
+        </div>
+    </footer>
+    
+    <div id="modal" class="modal fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center p-4 opacity-0 pointer-events-none">
+        <div id="modal-content" class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto transform scale-95">
+        </div>
+    </div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const data = {
+        history: [
+            { era: '〜1624年', title: '先史時代〜大航海時代', detail: 'マレー・ポリネシア系先住民が暮らし、後に漢民族が移住。ポルトガル人が「麗しの島（Formosa）」と命名。' },
+            { era: '1624〜1662年', title: 'オランダ・スペイン統治時代', detail: '欧州の交易拠点として、オランダが南部を、スペインが北部を統治。' },
+            { era: '1662〜1683年', title: '鄭氏政権時代', detail: '鄭成功がオランダを追放し、台湾初の漢民族政権を樹立。大陸からの移民が増加。' },
+            { era: '1683〜1895年', title: '清朝統治時代', detail: '清が台湾を版図に加え、現在の台湾文化の礎が築かれる。台北が発展開始。' },
+            { era: '1895〜1945年', title: '日本統治時代', detail: '日清戦争後、日本が統治。鉄道や水道などのインフラ整備を強力に推進。総統府など現存する建築物も多い。' },
+            { era: '1945年〜', title: '中華民国の台湾移転', detail: '第二次大戦後、国共内戦に敗れた国民党政府が台湾へ移転。台北を臨時首都とする。' },
+            { era: '1980年代後半〜', title: '民主化の時代', detail: '戒厳令が解除され、急速に民主化が進展。李登輝が初の民選総統に就任し、今日の自由な社会の基礎を築く。' }
+        ],
+        spots: [
+            { id: "spot01", name: "国立故宮博物院", type: "市内観光", icon: '🏛️', short: "世界三大博物館の一つ。至宝が集結。", details: { desc: "中国歴代王朝の至宝約70万点を収蔵する世界トップクラスの博物館。「翠玉白菜」と「肉形石」は必見。広大なので有名作品に絞って回るのが効率的。", time: "2〜3時間", access: "MRT士林駅からバス（紅30等）で約15分。" }},
+            { id: "spot02", name: "中正紀念堂", type: "市内観光", icon: '🏛️', short: "衛兵交代式は圧巻。", details: { desc: "初代総統、蔣介石の顕彰施設。毎時0分に行われる衛兵交代式は見応え抜群。広大な広場と壮大な建築も見どころ。", time: "1時間", access: "MRT中正紀念堂駅すぐ。" }},
+            { id: "spot03", name: "龍山寺", type: "市内観光", icon: '🛕', short: "台北最古のパワースポット。", details: { desc: "台北で最も歴史のある寺院。道教や仏教など様々な神様が祀られ、人々の信仰心の篤さを感じられる。精緻な建築装飾は一見の価値あり。", time: "45分〜1時間", access: "MRT龍山寺駅から徒歩約5分。" }},
+            { id: "spot04", name: "台北101", type: "市内観光", icon: '🏙️', short: "台北の空のランドマーク。", details: { desc: "高さ509.2mを誇る超高層ビル。89階の展望台からの眺めは絶景。世界最速クラスのエレベーターも体験したい。", time: "1.5時間", access: "MRT台北101/世貿駅直結。" }},
+            { id: "spot05", name: "西門町", type: "市内観光", icon: '🛍️', short: "台湾の若者文化発信地。", details: { desc: "「台湾の渋谷」と称されるエリア。ファッション、グルメ、エンタメが密集。日本統治時代の面影を残す「西門紅樓」も訪れたい。", time: "1.5〜2時間", access: "MRT西門駅すぐ。" }},
+            { id: "spot06", name: "迪化街", type: "市内観光", icon: '🏮', short: "レトロな問屋街を散策。", details: { desc: "乾物や漢方を扱う問屋街。バロック様式の歴史的建造物が並ぶレトロな街並みが魅力。お洒落なリノベカフェも多数。", time: "1.5時間", access: "MRT北門駅から徒歩約10分。" }},
+            { id: "spot07", name: "九份", type: "日帰り", icon: '🏮', short: "ノスタルジックな山間の街。", details: { desc: "映画のモデルとも言われる、赤い提灯が幻想的な街並み。夕暮れ時の「豎崎路」は特に美しい。茶藝館で一息つくのもおすすめ。", time: "2〜3時間", access: "MRT忠孝復興駅からバス(1062番)で約1.5時間。" }},
+            { id: "spot08", name: "十份", type: "日帰り", icon: '🎈', short: "願いを込めて天燈上げ体験。", details: { desc: "線路沿いの街で、願い事を書いた天燈（ランタン）を空に飛ばす体験ができる。電車が通過するスリリングな光景も名物。", time: "1.5時間", access: "台鉄平渓線 十份駅下車。" }},
+            { id: "spot09", name: "猫空", type: "日帰り", icon: '🚠', short: "ロープウェイで絶景茶畑へ。", details: { desc: "鉄観音茶の産地として有名な山。ロープウェイからの眺めが素晴らしく、特に床が透明なキャビンはスリル満点。山頂の茶藝館で優雅なひとときを。", time: "2〜3時間", access: "MRT動物園駅から猫空ロープウェイ乗換。" }},
+            { id: "spot10", name: "饒河街観光夜市", type: "夜市", icon: '🌙', short: "一本道で分かりやすい夜市。", details: { desc: "約600mの一本道にグルメ屋台がひしめく。食べ歩きに特化しており初心者にもおすすめ。入口の「福州世祖胡椒餅」は必食。", time: "1.5〜2時間", access: "MRT松山駅すぐ。" }},
+            { id: "spot11", name: "福州世祖胡椒餅", type: "夜市", icon: '🥟', short: "行列必至の焼き立て胡椒餅。", price: 60, details: { desc: "饒河街夜市の名物。パリッとした皮の中から、胡椒の効いたジューシーな肉餡とネギが溢れ出す。火傷に注意。", time: "15:30-24:00", access: "饒河街夜市入口" }},
+            { id: "spot12", name: "方家雞肉飯", type: "夜市", icon: '🍚', short: "ビブグルマンの絶品雞肉飯。", price: 30, details: { desc: "寧夏夜市にあるビブグルマン掲載店。鶏の出汁が染みたご飯は、シンプルながら奥深い味わい。魯肉飯も人気。", time: "17:30-24:00", access: "寧夏夜市" }},
+            { id: "spot13", name: "劉芋仔", type: "夜市", icon: '🍠', short: "甘じょっぱいタロ芋団子。", price: 30, details: { desc: "寧夏夜市の行列店。塩漬け卵黄入りのタロ芋団子は、揚げたてで外はサクッ、中はもちもち。甘さと塩気のバランスが絶妙。", time: "17:00-24:30", access: "寧夏夜市" }},
+            { id: "spot14", name: "阿宗麺線", type: "グルメ", icon: '🍜', short: "とろみスープの立ち食い麺線。", price: 60, details: { desc: "西門町の名物。鰹出汁が効いたとろみのあるスープに、モツと細い素麺が絡む。立ち食いスタイルも風情あり。", time: "09:00-23:00", access: "西門町" }},
+            { id: "spot15", name: "鼎泰豊", type: "グルメ", icon: '🥟', short: "小籠包の世界代表。", price: 250, details: { desc: "言わずと知れた小籠包の名店。黄金比18褶の美しい見た目と、溢れ出すスープはまさに芸術品。サービスも一流。", time: "店舗による", access: "台北101, 信義など" }},
+            { id: "spot16", name: "杭州小籠湯包", type: "グルメ", icon: '🥟', short: "地元民に愛されるコスパ店。", price: 180, details: { desc: "ビブグルマン掲載。鼎泰豊より手頃な価格で、肉汁たっぷりの本格小籠包が味わえる。地元客で常に賑わう人気店。", time: "11:00-21:00", access: "中正紀念堂エリア" }},
+            { id: "spot17", name: "金峰魯肉飯", type: "グルメ", icon: '🍚', short: "甘めのタレが絶品な魯肉飯。", price: 35, details: { desc: "魯肉飯の超有名店。椎茸が入った甘めの肉そぼろがご飯と相性抜群。常に満席だが回転は速い。", time: "08:00-24:30", access: "中正紀念堂エリア" }},
+            { id: "spot18", name: "永康牛肉麺", type: "グルメ", icon: '🍜', short: "ホロホロ牛肉のピリ辛麺。", price: 270, details: { desc: "牛肉麺の聖地、永康街を代表する店。ピリ辛の紅燒スープと、ゴロゴロ入った柔らかい牛肉がたまらない。", time: "11:00-21:00", access: "東門(永康街)" }},
+            { id: "spot19", name: "阜杭豆漿", type: "グルメ", icon: '🥣', short: "行列必至の台湾式朝ごはん。", price: 40, details: { desc: "ミシュランも認める朝食の超人気店。お酢で豆乳を固めた食べるスープ「鹹豆漿」と、窯で焼いたパン「厚餅夾蛋」は必食。", time: "05:30-12:30(月曜休)", access: "MRT善導寺駅すぐ" }},
+            { id: "spot20", name: "冰讃", type: "スイーツ", icon: '🍧', short: "旬のマンゴーかき氷(期間限定)。", price: 160, details: { desc: "4月〜10月限定営業。新鮮なアップルマンゴーを贅沢に使ったかき氷は、まさに絶品。ふわふわのミルク氷との相性も抜群。", time: "11:00-22:00", access: "MRT雙連駅近く" }},
+            { id: "spot21", name: "古早味豆花", type: "スイーツ", icon: '🍮', short: "昔ながらの素朴な豆花。", price: 50, details: { desc: "なめらかな舌触りと、大豆の優しい甘さが特徴の豆花。タピオカやピーナッツなど、好きなトッピングを選んで楽しめる。", time: "10:00-25:00", access: "MRT雙連駅近く" }},
+            { id: "spot22", name: "50嵐", type: "スイーツ", icon: '🥤', short: "定番のタピオカミルクティー。", price: 50, details: { desc: "台湾を代表するドリンクスタンド。小粒のタピオカが特徴。氷の量や甘さを細かくカスタマイズできるのが嬉しい。", time: "店舗による", access: "市内各所" }}
+        ],
+        gourmetCategories: [
+            { name: "夜市", items: ["福州世祖胡椒餅", "方家雞肉飯", "劉芋仔"] },
+            { name: "小籠包", items: ["鼎泰豊", "杭州小籠湯包"] },
+            { name: "B級グルメ", items: ["阿宗麺線", "金峰魯肉飯", "永康牛肉麺"] },
+            { name: "朝ごはん", items: ["阜杭豆漿"] },
+            { name: "スイーツ", items: ["冰讃", "古早味豆花", "50嵐"] }
+        ],
+        tips: [
+            { title: "交通完全ガイド", content: "<strong>悠遊カード(EasyCard)</strong>は必須。日本のSuicaのようにMRT、バス、コンビニで使え、行動が格段にスムーズに。空港や駅で購入・チャージ可能。<br><strong>MRT:</strong> 主要観光地はほぼ網羅。路線が色分けされ分かりやすい。<br><strong>バス:</strong> 乗車時と降車時にカードをタッチ。<br><strong>タクシー:</strong> 初乗りNT$85。メーター制で安心。" },
+            { title: "お金と支払い", content: "<strong>通貨:</strong> ニュー台湾ドル(NT$)。NT$1≒4.8円。<br><strong>両替:</strong> 台湾の空港が最もレートが良い。<br><strong>支払い:</strong> ローカル食堂や夜市は現金主義。デパートや有名店ではクレジットカードが使える(JCBも可)。" },
+            { title: "言語とコミュニケーション", content: "<strong>公用語:</strong> 中国語(北京語)。<br><strong>挨拶:</strong> 你好(ニーハオ)、謝謝(シェイシェイ)、不好意思(ブーハオイース)を覚えておくと便利。<br><strong>ツール:</strong> 翻訳アプリがあればほぼ困らない。観光地では簡単な日本語が通じることも。" },
+            { title: "治安・その他", content: "<strong>治安:</strong> 全般的に良好。ただしスリや置き引きには注意。<br><strong>交通:</strong> バイクの交通量が非常に多い。道を渡る際は左右をよく確認。<br><strong>チップ:</strong> 基本的に不要。<br><strong>トイレ:</strong> トイレットペーパーは流さず、備え付けのゴミ箱に捨てるのが一般的。" }
+        ]
+    };
+    
+    let selectedSpots = new Set();
+    
+    const historyContainer = document.getElementById('history-timeline');
+    data.history.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'relative pl-8 pb-8 timeline-item';
+        div.innerHTML = `
+            <div class="timeline-dot bg-white border-2 border-amber-500 rounded-full"></div>
+            <div class="cursor-pointer">
+                <p class="text-sm text-amber-600 font-semibold">${item.era}</p>
+                <h4 class="font-bold text-base md:text-lg">${item.title}</h4>
+            </div>
+            <div class="history-detail hidden mt-2 pl-4 border-l-2 border-stone-200">
+                <p class="text-stone-600 text-sm">${item.detail}</p>
+            </div>
+        `;
+        historyContainer.appendChild(div);
+    });
+
+    historyContainer.addEventListener('click', e => {
+        const header = e.target.closest('.cursor-pointer');
+        if (header) {
+            const detail = header.nextElementSibling;
+            detail.classList.toggle('hidden');
+        }
+    });
+
+    const exploreGrid = document.getElementById('explore-grid');
+    function renderSpots(filter = 'all') {
+        exploreGrid.innerHTML = '';
+        const filteredSpots = (filter === 'all') ? data.spots : data.spots.filter(spot => spot.type === filter || (filter === 'グルメ' && ['グルメ', '夜市'].includes(spot.type)) || (filter === 'スイーツ' && spot.type === 'スイーツ'));
+        
+        filteredSpots.forEach(spot => {
+            const card = document.createElement('div');
+            card.className = 'spot-card bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer transform hover:-translate-y-1 transition-transform duration-300';
+            card.dataset.spotId = spot.id;
+            if (selectedSpots.has(spot.id)) {
+                card.classList.add('selected');
+            }
+            card.innerHTML = `
+                <div class="p-4">
+                    <div class="flex items-start justify-between">
+                        <h3 class="font-bold text-base text-stone-800 pr-2">${spot.name}</h3>
+                        <div class="text-3xl ml-2 flex-shrink-0">${spot.icon}</div>
+                    </div>
+                    <p class="text-stone-600 mt-2 text-sm">${spot.short}</p>
+                    <span class="inline-block bg-amber-100 text-amber-800 text-xs font-semibold mt-3 px-2.5 py-0.5 rounded-full">${spot.type}</span>
+                </div>
+            `;
+            exploreGrid.appendChild(card);
+        });
+    }
+    
+    const filters = document.getElementById('filters');
+    filters.addEventListener('click', e => {
+        if(e.target.tagName === 'BUTTON') {
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active-filter', 'bg-amber-600');
+                btn.classList.add('inactive-filter', 'bg-stone-200');
+            });
+            e.target.classList.add('active-filter', 'bg-amber-600');
+            e.target.classList.remove('inactive-filter', 'bg-stone-200');
+            renderSpots(e.target.dataset.filter);
+        }
+    });
+
+    const priceData = {
+        labels: ['~ NT$50', 'NT$51-100', 'NT$101-200', '> NT$200'],
+        datasets: [{
+            label: 'グルメ価格帯',
+            data: [0, 0, 0, 0],
+            backgroundColor: ['#FBBF24', '#F97316', '#EA580C', '#C2410C'],
+            borderColor: '#FDFBF8',
+            borderWidth: 2,
+            hoverOffset: 4
+        }]
+    };
+    const priceMenuMap = { '~ NT$50': [], 'NT$51-100': [], 'NT$101-200': [], '> NT$200': [] };
+    data.spots.filter(s => s.price !== undefined).forEach(s => {
+        if (s.price <= 50) { priceData.datasets[0].data[0]++; priceMenuMap['~ NT$50'].push(s.name); } 
+        else if (s.price <= 100) { priceData.datasets[0].data[1]++; priceMenuMap['NT$51-100'].push(s.name); } 
+        else if (s.price <= 200) { priceData.datasets[0].data[2]++; priceMenuMap['NT$101-200'].push(s.name); } 
+        else { priceData.datasets[0].data[3]++; priceMenuMap['> NT$200'].push(s.name); }
+    });
+
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: priceData,
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { font: { size: 12 } } },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => `${c.dataset.label || ''}: ${c.label}`,
+                        afterLabel: (c) => {
+                            const items = priceMenuMap[c.label];
+                            return items && items.length ? '例: ' + items.slice(0,2).join(', ') : '';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    const gourmetCategoriesContainer = document.getElementById('gourmet-categories');
+    data.gourmetCategories.forEach(cat => {
+        const div = document.createElement('div');
+        div.className = 'bg-white rounded-lg shadow-sm p-4';
+        const itemsHtml = cat.items.map(itemName => {
+            const spot = data.spots.find(s => s.name === itemName);
+            return `<li class="modal-trigger text-stone-700 hover:text-amber-600 cursor-pointer text-sm" data-spot-id="${spot.id}">${spot.icon} ${spot.name}</li>`;
+        }).join('');
+        div.innerHTML = `<h4 class="font-bold text-base md:text-lg mb-2">${cat.name}</h4><ul class="space-y-1 list-disc list-inside">${itemsHtml}</ul>`;
+        gourmetCategoriesContainer.appendChild(div);
+    });
+    
+    gourmetCategoriesContainer.addEventListener('click', e => {
+        if (e.target.closest('.modal-trigger')) {
+            openModal(e.target.closest('.modal-trigger').dataset.spotId);
+        }
+    });
+
+    const tipsAccordion = document.getElementById('tips-accordion');
+    data.tips.forEach(tip => {
+        const div = document.createElement('div');
+        div.className = 'bg-white rounded-lg shadow-sm';
+        div.innerHTML = `
+            <div class="tip-header cursor-pointer p-5 flex justify-between items-center">
+                <h3 class="font-semibold text-base md:text-lg">${tip.title}</h3>
+                <span class="transform transition-transform duration-300">▼</span>
+            </div>
+            <div class="tip-content hidden p-5 border-t border-stone-200">
+                <p class="text-stone-600 leading-relaxed text-sm">${tip.content}</p>
+            </div>
+        `;
+        tipsAccordion.appendChild(div);
+    });
+
+    tipsAccordion.addEventListener('click', e => {
+        const header = e.target.closest('.tip-header');
+        if (header) {
+            const content = header.nextElementSibling;
+            const arrow = header.querySelector('span');
+            content.classList.toggle('hidden');
+            arrow.classList.toggle('rotate-180');
+        }
+    });
+    
+    const modal = document.getElementById('modal');
+    const modalContent = document.getElementById('modal-content');
+    
+    function openModal(spotId) {
+        const spot = data.spots.find(s => s.id === spotId);
+        if (spot) {
+            let detailsHtml = `<p class="text-stone-600 text-sm">${spot.details.desc}</p>`;
+            if (spot.details.time) detailsHtml += `<div class="mt-4"><strong class="font-semibold text-stone-700 text-sm">推奨滞在時間/営業時間:</strong> <span class="text-sm">${spot.details.time}</span></div>`;
+            if (spot.details.access) detailsHtml += `<div class="mt-2"><strong class="font-semibold text-stone-700 text-sm">アクセス:</strong> <span class="text-sm">${spot.details.access}</span></div>`;
+            if (spot.price) detailsHtml += `<div class="mt-2"><strong class="font-semibold text-stone-700 text-sm">想定価格:</strong> <span class="text-sm">NT$${spot.price}</span></div>`;
+            
+            let aiButtonHtml = '';
+            if(spot.type === '夜市' || spot.type === 'グルメ' || spot.type === 'スイーツ') {
+                aiButtonHtml = `<button id="gourmet-explain-btn" data-spot-name="${spot.name}" class="mt-4 w-full text-sm bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors">✨ AIに注文のコツを聞く</button><div id="gourmet-loader" class="hidden loader"></div><div id="gourmet-output" class="gemini-output hidden"></div>`;
+            }
+
+            modalContent.innerHTML = `
+                <div class="p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <h2 class="text-xl font-bold text-stone-800 pr-4">${spot.name}</h2>
+                         <div class="text-4xl ml-4 flex-shrink-0">${spot.icon}</div>
+                    </div>
+                    ${detailsHtml}
+                    ${aiButtonHtml}
+                </div>
+                <div class="bg-stone-50 p-4 text-right">
+                    <button id="close-modal" class="px-4 py-2 bg-stone-200 text-stone-800 rounded-lg font-semibold hover:bg-stone-300 text-sm">閉じる</button>
+                </div>
+            `;
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-95');
+        }
+    }
+    
+    function closeModal() {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        modalContent.classList.add('scale-95');
+    }
+
+    modal.addEventListener('click', e => {
+        if (e.target.id === 'close-modal') closeModal();
+        if (e.target.id === 'gourmet-explain-btn') {
+            const spotName = e.target.dataset.spotName;
+            const prompt = `あなたは台湾のグルメ専門家です。台北にある「${spotName}」というお店（または食べ物）について、その魅力、代表的なメニュー、味の特徴、そして注文する際のコツや楽しみ方を、日本の20代男性旅行者に向けてフレンドリーかつ具体的に解説してください。箇条書きを使い、分かりやすくまとめてください。`;
+            const loader = document.getElementById('gourmet-loader');
+            const outputDiv = document.getElementById('gourmet-output');
+            e.target.disabled = true;
+            callGemini(prompt, loader, outputDiv, e.target);
+        }
+    });
+    
+    exploreGrid.addEventListener('click', e => {
+        const card = e.target.closest('.spot-card');
+        if (card) {
+            const spotId = card.dataset.spotId;
+            card.classList.toggle('selected');
+            if(selectedSpots.has(spotId)) {
+                selectedSpots.delete(spotId);
+            } else {
+                selectedSpots.add(spotId);
+            }
+            updateSelectedSpotsList();
+        }
+    });
+
+    const selectedSpotsList = document.getElementById('selected-spots-list');
+    const selectedSpotsPlaceholder = document.getElementById('selected-spots-placeholder');
+    const generatePlanBtn = document.getElementById('generate-plan-btn');
+
+    function updateSelectedSpotsList() {
+        selectedSpotsList.innerHTML = '';
+        if (selectedSpots.size === 0) {
+            selectedSpotsList.appendChild(selectedSpotsPlaceholder);
+            generatePlanBtn.disabled = true;
+        } else {
+            selectedSpots.forEach(spotId => {
+                const spot = data.spots.find(s => s.id === spotId);
+                const tag = document.createElement('span');
+                tag.className = 'bg-amber-200 text-amber-800 text-sm font-semibold px-3 py-1 rounded-full';
+                tag.textContent = spot.name;
+                selectedSpotsList.appendChild(tag);
+            });
+            generatePlanBtn.disabled = false;
+        }
+    }
+    
+    updateSelectedSpotsList();
+
+    generatePlanBtn.addEventListener('click', () => {
+        const spotNames = Array.from(selectedSpots).map(id => data.spots.find(s => s.id === id).name);
+        const prompt = `あなたは日本の優秀な旅行プランナーです。20代後半の日本人男性が、初めて台湾の台北へ3日間旅行します。彼が興味を持っているのは以下のスポットです：${spotNames.join('、')}。これらのスポットを効率よく、かつ楽しめるように組み込んだ、具体的で現実的な3日間のモデルコースを作成してください。各日の移動手段のヒント（例：MRT、バス）や、朝食・昼食・夕食のおすすめグルメも適宜含めてください。出力は、親しみやすい言葉遣いで、markdown形式を使い、1日ごとの見出しを立てて分かりやすく記述してください。`;
+        const loader = document.getElementById('plan-loader');
+        const outputDiv = document.getElementById('plan-output');
+        generatePlanBtn.disabled = true;
+        callGemini(prompt, loader, outputDiv, generatePlanBtn);
+    });
+    
+    async function callGemini(prompt, loader, outputDiv, buttonToDisable) {
+        loader.style.display = 'block';
+        outputDiv.style.display = 'none';
+        
+        const apiKey = ""; 
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        
+        let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+        const payload = { contents: chatHistory };
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                const text = result.candidates[0].content.parts[0].text;
+                outputDiv.textContent = text;
+                outputDiv.style.display = 'block';
+            } else {
+                let errorText = "AIからの応答がありませんでした。";
+                if (result.promptFeedback && result.promptFeedback.blockReason) {
+                    errorText += ` 理由: ${result.promptFeedback.blockReason}`;
+                }
+                outputDiv.textContent = errorText;
+                outputDiv.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            outputDiv.textContent = 'エラーが発生しました。時間をおいて再試行してください。';
+            outputDiv.style.display = 'block';
+        } finally {
+            loader.style.display = 'none';
+            if(buttonToDisable) buttonToDisable.disabled = false;
+        }
+    }
+
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const mobileMenu = document.getElementById('mobile-menu');
+    mobileMenuButton.addEventListener('click', () => mobileMenu.classList.toggle('hidden'));
+    
+    const navLinks = document.querySelectorAll('.nav-link');
+    const sections = document.querySelectorAll('section');
+    
+    navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            if (mobileMenu.classList.contains('hidden') === false) {
+                mobileMenu.classList.add('hidden');
+            }
+        });
+    });
+    
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(section => {
+            if (pageYOffset >= section.offsetTop - 80) current = section.getAttribute('id');
+        });
+
+        navLinks.forEach(link => {
+            link.classList.remove('active-nav');
+            link.classList.add('inactive-nav');
+            if (link.getAttribute('href').substring(1) === current) {
+                link.classList.add('active-nav');
+                link.classList.remove('inactive-nav');
+            }
+        });
+    });
+
+    renderSpots();
+});
+</script>
+</body>
+</html>
